@@ -4,6 +4,7 @@ using PhoneApp.Domain.DTO;
 using PhoneApp.Domain.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 
@@ -13,6 +14,7 @@ namespace NewUserPlugin
     public class Plugin : IPluggable
     {
         private const string NEW_USERS_URL = "https://dummyjson.com/users";
+        private const string LOCAL_DATA_FILE = "data.json"; 
         private static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
 
         public IEnumerable<DataTransferObject> Run(IEnumerable<DataTransferObject> args)
@@ -53,25 +55,49 @@ namespace NewUserPlugin
                     {
                         var usersData = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(usersList.ToString());
 
-                        var users = usersData.Select(user => new EmployeesDTO
+                        return usersData.Select(user => new EmployeesDTO
                         {
                             Name = $"{user["firstName"]} {user["lastName"]}"
                         }).ToList();
-
-                        return users;
                     }
-                    return Array.Empty<EmployeesDTO>(); 
                 }
                 catch (HttpRequestException httpEx)
                 {
                     logger.Error($"Network error while loading new users: {httpEx.Message}");
-                    return Array.Empty<EmployeesDTO>();
                 }
                 catch (Exception ex)
                 {
                     logger.Error($"Error while loading new users: {ex.Message}");
-                    return Array.Empty<EmployeesDTO>();
                 }
+            }
+
+            return LoadUsersFromFile();
+        }
+
+        private IEnumerable<EmployeesDTO> LoadUsersFromFile()
+        {
+            logger.Info("Loading users from backup file");
+            try
+            {
+                var jsonData = File.ReadAllText(LOCAL_DATA_FILE);
+                var jsonObject = JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonData);
+
+                if (jsonObject.TryGetValue("users", out var usersList))
+                {
+                    var usersData = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(usersList.ToString());
+
+                    return usersData.Select(user => new EmployeesDTO
+                    {
+                        Name = $"{user["firstName"]} {user["lastName"]}"
+                    }).ToList();
+                }
+
+                return Array.Empty<EmployeesDTO>();
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"Error while loading users from file: {ex.Message}");
+                return Array.Empty<EmployeesDTO>();
             }
         }
     }
